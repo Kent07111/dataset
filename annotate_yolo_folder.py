@@ -9,6 +9,17 @@ INPUT_DIR = "."
 LABEL_DIR = "labels_manual"
 PREVIEW_DIR = "preview_manual"
 
+# PILIH FOLDER YANG MAU DIKERJAKAN
+# Contoh:
+# ["car"]
+# ["motorcycle"]
+# ["pickup"]
+# ["truck"]
+# ["car", "pickup"]
+TARGET_FOLDERS = ["motorcycle"]
+
+SKIP_ALREADY_LABELED = True
+
 CLASS_NAMES = {
     0: "car",
     1: "motorcycle",
@@ -23,7 +34,13 @@ CLASS_COLORS = {
     3: (0, 255, 255)     # kuning
 }
 
-IMAGE_FOLDERS = ["car", "motorcycle", "pickup", "truck"]
+CLASS_ID_BY_FOLDER = {
+    "car": 0,
+    "motorcycle": 1,
+    "pickup": 2,
+    "truck": 3
+}
+
 IMAGE_EXTS = ["*.jpg", "*.jpeg", "*.png", "*.bmp", "*.webp"]
 
 # =========================
@@ -70,7 +87,6 @@ def draw_boxes():
         color = CLASS_COLORS[cls_id]
         label = CLASS_NAMES[cls_id]
 
-        # Gambar bounding box
         cv2.rectangle(
             img_display,
             (x1, y1),
@@ -79,7 +95,6 @@ def draw_boxes():
             2
         )
 
-        # Setting label
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.7
         thickness = 2
@@ -91,10 +106,8 @@ def draw_boxes():
             thickness
         )
 
-        # Posisi label
         label_y = y1 - 10 if y1 - 10 > text_h else y1 + text_h + 10
 
-        # Background label
         cv2.rectangle(
             img_display,
             (x1, label_y - text_h - baseline),
@@ -103,7 +116,6 @@ def draw_boxes():
             -1
         )
 
-        # Text label
         cv2.putText(
             img_display,
             label,
@@ -148,7 +160,6 @@ def mouse_callback(event, x, y, flags, param):
         x2 = max(start_x, x)
         y2 = max(start_y, y)
 
-        # Abaikan box terlalu kecil
         if abs(x2 - x1) > 10 and abs(y2 - y1) > 10:
             boxes.append((current_class, x1, y1, x2, y2))
             draw_boxes()
@@ -156,12 +167,12 @@ def mouse_callback(event, x, y, flags, param):
 
 
 # =========================
-# AMBIL SEMUA GAMBAR
+# AMBIL GAMBAR BERDASARKAN FOLDER TARGET
 # =========================
 def collect_images():
     image_paths = []
 
-    for folder in IMAGE_FOLDERS:
+    for folder in TARGET_FOLDERS:
         folder_path = os.path.join(INPUT_DIR, folder)
 
         if not os.path.isdir(folder_path):
@@ -172,6 +183,21 @@ def collect_images():
             image_paths.extend(glob.glob(os.path.join(folder_path, ext)))
 
     return sorted(image_paths)
+
+
+# =========================
+# CEK LABEL SUDAH ADA
+# =========================
+def label_exists(img_path):
+    rel_path = os.path.relpath(img_path, INPUT_DIR)
+    class_folder = rel_path.split(os.sep)[0]
+
+    file_name = os.path.basename(img_path)
+    base_name = os.path.splitext(file_name)[0]
+
+    label_path = os.path.join(LABEL_DIR, class_folder, base_name + ".txt")
+
+    return os.path.exists(label_path)
 
 
 # =========================
@@ -223,10 +249,24 @@ def main():
 
     if not image_paths:
         print("Tidak ada gambar ditemukan.")
-        print("Pastikan folder car, motorcycle, pickup, truck ada.")
+        print("Pastikan TARGET_FOLDERS sesuai nama folder.")
         return
 
-    print(f"Total gambar ditemukan: {len(image_paths)}")
+    if SKIP_ALREADY_LABELED:
+        before = len(image_paths)
+        image_paths = [p for p in image_paths if not label_exists(p)]
+        skipped = before - len(image_paths)
+        print(f"File yang sudah dilabel dilewati: {skipped}")
+
+    if not image_paths:
+        print("Semua gambar pada folder target sudah punya label.")
+        return
+
+    first_folder = os.path.relpath(image_paths[0], INPUT_DIR).split(os.sep)[0]
+    current_class = CLASS_ID_BY_FOLDER.get(first_folder, 0)
+
+    print(f"Folder yang dikerjakan: {TARGET_FOLDERS}")
+    print(f"Total gambar yang perlu dilabel: {len(image_paths)}")
     print("==============================")
     print("KONTROL:")
     print("0 = car")
@@ -247,6 +287,13 @@ def main():
 
     while idx < len(image_paths):
         img_path = image_paths[idx]
+
+        rel_path = os.path.relpath(img_path, INPUT_DIR)
+        class_folder = rel_path.split(os.sep)[0]
+
+        if class_folder in CLASS_ID_BY_FOLDER:
+            current_class = CLASS_ID_BY_FOLDER[class_folder]
+
         img_original = cv2.imread(img_path)
 
         if img_original is None:
@@ -259,7 +306,8 @@ def main():
         print("\n==============================")
         print(f"Gambar {idx + 1}/{len(image_paths)}")
         print(f"File: {img_path}")
-        print(f"Class aktif: {current_class} - {CLASS_NAMES[current_class]}")
+        print(f"Folder: {class_folder}")
+        print(f"Class otomatis: {current_class} - {CLASS_NAMES[current_class]}")
 
         draw_boxes()
         cv2.imshow("Annotate YOLO Manual", img_display)
@@ -295,9 +343,6 @@ def main():
             elif key == ord("s"):
                 if boxes:
                     save_annotation(img_path, boxes)
-
-                    # INI BAGIAN PENTING:
-                    # setelah simpan, otomatis pindah gambar berikutnya
                     idx += 1
                     break
                 else:
@@ -314,7 +359,7 @@ def main():
                 return
 
     cv2.destroyAllWindows()
-    print("Semua gambar selesai.")
+    print("Semua gambar pada folder target selesai.")
 
 
 if __name__ == "__main__":
