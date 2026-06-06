@@ -16,7 +16,7 @@ PREVIEW_DIR = "preview_manual"
 # ["pickup"]
 # ["truck"]
 # ["car", "pickup"]
-TARGET_FOLDERS = ["motorcycle"]
+TARGET_FOLDERS = ["truck"]
 
 SKIP_ALREADY_LABELED = True
 
